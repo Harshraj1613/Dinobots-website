@@ -1,1 +1,130 @@
 @import "tailwindcss";
+
+/* min-height (not a fixed height) — the cinematic homepage's scenes are all
+   position:fixed/inset:0 (viewport-relative, independent of this rule), so
+   this only ever needs to guarantee full-viewport coverage as a floor, never
+   cap it. A fixed `height: 100%` here would lock these elements to the
+   viewport's initial size and stop the document from growing to fit taller
+   content (e.g. /join-us), breaking normal scrolling — see JoinUs.tsx. */
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+  background-color: #000;
+}
+
+/* Hero headline metallic sheen: a bright band sweeps across the gradient
+   text once on entrance, then settles into the static metallic finish. */
+@keyframes hero-shimmer-sweep {
+  0% {
+    background-position: 200% 0%;
+  }
+  100% {
+    background-position: -100% 0%;
+  }
+}
+
+.hero-shimmer {
+  animation: hero-shimmer-sweep 2.6s ease-out 1 both;
+}
+
+/* Team marquee: the row renders all 20 members twice back-to-back, then
+   animates the whole track by exactly one set's width (50% of the doubled
+   track). Because the second copy is pixel-identical to the first, the
+   loop point is invisible — there is no reset, only continuous motion. */
+@keyframes team-marquee-ltr {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-marquee-track {
+    animation: none !important;
+    transform: translateX(0%) !important;
+  }
+}
+
+/* /join-us only — see JoinUs.tsx, which toggles this class on <html> for
+   exactly as long as that route is mounted. Hides the document scrollbar's
+   paint on both the html and body boxes (different engines attribute the
+   root scrollbar to one or the other) without touching `overflow` at all —
+   the page remains a completely normal scrolling document; only the
+   scrollbar's own rendering is suppressed. Never applied globally, so the
+   homepage's cinematic scrolling and the admin dashboard keep their normal
+   scrollbar untouched. */
+html.join-us-page,
+html.join-us-page body {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+html.join-us-page::-webkit-scrollbar,
+html.join-us-page body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, other WebKit/Blink browsers */
+  width: 0;
+  height: 0;
+}
+
+/* /admin/* only — see AdminLayout.tsx, which toggles this class on <html>
+   for exactly as long as any admin route is mounted. Two jobs:
+   1) `overflow-y: auto !important` on both html and body defensively wins
+      over any stray inline `overflow: hidden` the homepage's cinematic
+      scroll-lock effects (App.tsx/Preloader.tsx) could otherwise leave on
+      `body` if a navigation away from "/" ever raced their cleanup — an
+      inline style normally beats a stylesheet rule, so this has to be
+      `!important` to actually guarantee the admin shell can always scroll.
+   2) Hides the scrollbar's paint only, exactly like `.join-us-page` above —
+      normal wheel/trackpad/touch scrolling is left completely intact. */
+html.admin-page,
+html.admin-page body {
+  overflow-y: auto !important;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+html.admin-page::-webkit-scrollbar,
+html.admin-page body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, other WebKit/Blink browsers */
+  width: 0;
+  height: 0;
+}
+
+/* "/" only — the homepage's cinematic scene-based experience. Toggled by
+   App.tsx for exactly as long as it's mounted. Hides the scrollbar's paint
+   only — it never touches `overflow` (App's own scene-lock effect is the
+   sole owner of that, per scene) and never blocks real scrolling; the
+   boundary-aware wheel/touch handling in App.tsx is what makes a section
+   taller than the viewport still genuinely scrollable by cursor/trackpad/
+   touch, exactly like every other scrollbar-hiding block above. */
+html.cinematic-page,
+html.cinematic-page body {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+html.cinematic-page::-webkit-scrollbar,
+html.cinematic-page body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, other WebKit/Blink browsers */
+  width: 0;
+  height: 0;
+}
+
+/* Reusable on any element that needs to scroll (overflow-y: auto/scroll)
+   without visibly showing its own scrollbar — e.g. a modal's internal
+   content area. Purely cosmetic: never touches `overflow` itself, so
+   normal wheel/trackpad/touch scrolling is always left working. */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, other WebKit/Blink browsers */
+  width: 0;
+  height: 0;
+}
