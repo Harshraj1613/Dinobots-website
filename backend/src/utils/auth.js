@@ -49,11 +49,24 @@ function parseDurationToMs(duration) {
 
 // Centralized cookie options so login/logout always agree on how the
 // auth cookie is written and cleared.
+//
+// `sameSite` and `secure` are deliberately tied to the SAME flag. In
+// production the frontend (Vercel) and backend (Render) are different
+// sites, so a `SameSite=Lax` cookie is stored on login but never actually
+// sent by the browser on the follow-up `fetch('/api/admin/me', {credentials:
+// 'include'})` — Lax only rides along on top-level navigations, not
+// fetch/XHR to a different site. That silently 401s every request after
+// login, which is exactly what broke production auth. `SameSite=None` is
+// required for cross-site cookies to be sent on fetch/XHR, but browsers
+// reject `None` outright unless `Secure` is also set — so it can only be
+// used where `secure` is true. Local dev stays on `lax`/non-secure (same
+// site, plain http), where `none` would just be dropped by the browser.
 function getAuthCookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production'
   return {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction,
     maxAge: parseDurationToMs(process.env.JWT_EXPIRES_IN || '1h'),
   }
 }
