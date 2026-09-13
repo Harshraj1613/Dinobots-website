@@ -1,6 +1,5 @@
 const fs = require('fs')
 const path = require('path')
-const crypto = require('crypto')
 const multer = require('multer')
 
 // The only categories a client may ever write into — req.params.category is
@@ -34,21 +33,13 @@ function validateCategory(req, res, next) {
   next()
 }
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    // req.params.category is already validated by validateCategory (which
-    // always runs first on every route using this storage), so it is safe
-    // to use directly here.
-    cb(null, path.join(UPLOADS_ROOT, req.params.category))
-  },
-  filename(req, file, cb) {
-    // Never trust the client-supplied filename — generate a fresh random
-    // one, extension taken only from the verified mimetype.
-    const ext = ALLOWED_MIME_TO_EXT[file.mimetype]
-    const unique = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`
-    cb(null, unique)
-  },
-})
+// In-memory only — the buffer is streamed straight to Cloudinary by
+// mediaController.js's uploadImage and never touches this server's own
+// disk, so an upload survives Render restarts/redeploys/spin-downs instead
+// of vanishing with the container's ephemeral filesystem (see UPLOADS_ROOT
+// above, kept only so listMedia/deleteMedia below can still browse/remove
+// whatever pre-existing local files happen to still be sitting there).
+const storage = multer.memoryStorage()
 
 function fileFilter(req, file, cb) {
   if (!ALLOWED_MIME_TO_EXT[file.mimetype]) {

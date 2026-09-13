@@ -1,6 +1,7 @@
 const TeamMember = require('../models/TeamMember')
 const { recordActivity } = require('../utils/activity')
 const { isNonEmptyString, toBoolean, toNumberOr } = require('../utils/validation')
+const { deleteCloudinaryImageIfApplicable } = require('../utils/cloudinaryImage')
 
 const GENERIC_ERROR = { success: false, message: 'Something went wrong. Please try again.' }
 
@@ -111,6 +112,7 @@ async function updateTeamMember(req, res) {
       return res.status(400).json({ success: false, message: 'Invalid team member data.', errors })
     }
 
+    const previousImage = member.image
     const { name, post, description, image, order, isActive } = req.body || {}
     if (name !== undefined) member.name = String(name).trim()
     if (post !== undefined) member.post = String(post).trim()
@@ -120,6 +122,14 @@ async function updateTeamMember(req, res) {
     if (isActive !== undefined) member.isActive = toBoolean(isActive, member.isActive)
 
     await member.save()
+
+    // Best-effort cleanup of the OLD Cloudinary asset once the new image is
+    // safely saved — never blocks/fails this request (see cloudinaryImage.js).
+    // No-ops entirely for `/uploads/...` paths or an unchanged image.
+    if (image !== undefined && member.image !== previousImage) {
+      await deleteCloudinaryImageIfApplicable(previousImage)
+    }
+
     await recordActivity('team_member_updated', `Updated team member "${member.name}"`, 'TeamMember', member._id)
 
     return res.status(200).json({ success: true, member: toAdminMember(member) })
@@ -158,6 +168,8 @@ async function deleteTeamMember(req, res) {
   try {
     const member = await TeamMember.findByIdAndDelete(req.params.id)
     if (!member) return res.status(404).json({ success: false, message: 'Team member not found.' })
+
+    await deleteCloudinaryImageIfApplicable(member.image)
 
     await recordActivity('team_member_deleted', `Deleted team member "${member.name}"`, 'TeamMember', member._id)
 

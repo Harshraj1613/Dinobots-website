@@ -1,6 +1,7 @@
 const Achievement = require('../models/Achievement')
 const { recordActivity } = require('../utils/activity')
 const { isNonEmptyString, toBoolean, toNumberOr } = require('../utils/validation')
+const { deleteCloudinaryImageIfApplicable } = require('../utils/cloudinaryImage')
 
 const GENERIC_ERROR = { success: false, message: 'Something went wrong. Please try again.' }
 
@@ -106,6 +107,7 @@ async function updateAchievement(req, res) {
       return res.status(400).json({ success: false, message: 'Invalid achievement data.', errors })
     }
 
+    const previousImage = achievement.image
     const { title, description, image, order, isActive } = req.body || {}
     if (title !== undefined) achievement.title = String(title).trim()
     if (description !== undefined) achievement.description = String(description).trim()
@@ -114,6 +116,11 @@ async function updateAchievement(req, res) {
     if (isActive !== undefined) achievement.isActive = toBoolean(isActive, achievement.isActive)
 
     await achievement.save()
+
+    if (image !== undefined && achievement.image !== previousImage) {
+      await deleteCloudinaryImageIfApplicable(previousImage)
+    }
+
     await recordActivity(
       'achievement_updated',
       `Updated achievement${achievement.title ? ` "${achievement.title}"` : ''}`,
@@ -131,6 +138,8 @@ async function deleteAchievement(req, res) {
   try {
     const achievement = await Achievement.findByIdAndDelete(req.params.id)
     if (!achievement) return res.status(404).json({ success: false, message: 'Achievement not found.' })
+
+    await deleteCloudinaryImageIfApplicable(achievement.image)
 
     await recordActivity(
       'achievement_deleted',

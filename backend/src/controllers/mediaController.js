@@ -1,25 +1,55 @@
 const fs = require('fs')
 const path = require('path')
 const { ALLOWED_CATEGORIES, UPLOADS_ROOT } = require('../middleware/upload')
+const { cloudinary, isCloudinaryConfigured } = require('../config/cloudinary')
 
 // Filenames are always generated server-side (see middleware/upload.js), so
 // this pattern only ever needs to match what we ourselves produced — it
 // doubles as a defense-in-depth check against path traversal on delete.
 const SAFE_FILENAME = /^[0-9]+-[a-f0-9]{16}\.(jpg|png|webp)$/
 
-// POST /api/admin/media/upload/:category — the actual file write already
-// happened in the uploadSingleImage middleware by the time this runs.
+// POST /api/admin/media/upload/:category — the file arrives in memory only
+// (see middleware/upload.js's memoryStorage) and is streamed straight to
+// Cloudinary here; it is never written to this server's own disk, so it
+// survives Render restarts/redeploys/spin-downs instead of vanishing with
+// the container's ephemeral filesystem along with everything under
+// UPLOADS_ROOT. `publicId` is additive (existing callers that only read
+// `url` are unaffected) and lets utils/cloudinaryImage.js delete this exact
+// asset later without needing a second field on whatever model stores it.
 async function uploadImage(req, res) {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file was provided.' })
   }
-  const url = `/uploads/${req.params.category}/${req.file.filename}`
-  return res.status(201).json({ success: true, url })
+
+  if (!isCloudinaryConfigured) {
+    return res.status(500).json({
+      success: false,
+      message:
+        'Media storage is not configured on the server. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.',
+    })
+  }
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: `dinobots/${req.params.category}`, resource_type: 'image' },
+        (error, uploadResult) => (error ? reject(error) : resolve(uploadResult)),
+      )
+      stream.end(req.file.buffer)
+    })
+
+    return res.status(201).json({ success: true, url: result.secure_url, publicId: result.public_id })
+  } catch {
+    return res.status(500).json({ success: false, message: 'Image upload failed.' })
+  }
 }
 
-// GET /api/admin/media — lists every uploaded file across all categories,
-// newest first. Files are the source of truth here (no separate DB model),
-// matching the "keep it simple" media system asked for.
+// GET /api/admin/media — lists local-disk files left over from before this
+// switch to Cloudinary, newest first. Deliberately UNCHANGED: it still only
+// scans UPLOADS_ROOT, so it keeps working exactly as before for whatever
+// pre-existing `/uploads/...` files still happen to be on this container's
+// disk — it just no longer reflects new uploads, since those are never
+// written here anymore (they live in Cloudinary now; see uploadImage).
 async function listMedia(req, res) {
   try {
     const files = []

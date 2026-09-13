@@ -1,6 +1,7 @@
 const Event = require('../models/Event')
 const { recordActivity } = require('../utils/activity')
 const { isNonEmptyString, toBoolean } = require('../utils/validation')
+const { deleteCloudinaryImageIfApplicable } = require('../utils/cloudinaryImage')
 
 const GENERIC_ERROR = { success: false, message: 'Something went wrong. Please try again.' }
 
@@ -165,6 +166,7 @@ async function updateEvent(req, res) {
       isActive,
     } = req.body || {}
 
+    const previousImage = event.image
     if (name !== undefined) event.name = String(name).trim()
     if (shortDescription !== undefined) event.shortDescription = String(shortDescription).trim()
     if (fullDescription !== undefined) event.fullDescription = String(fullDescription).trim()
@@ -177,6 +179,11 @@ async function updateEvent(req, res) {
     if (isActive !== undefined) event.isActive = toBoolean(isActive, event.isActive)
 
     await event.save()
+
+    if (image !== undefined && event.image !== previousImage) {
+      await deleteCloudinaryImageIfApplicable(previousImage)
+    }
+
     await recordActivity('event_updated', `Updated event "${event.name}"`, 'Event', event._id)
 
     return res.status(200).json({ success: true, event: toAdminEvent(event) })
@@ -190,6 +197,8 @@ async function deleteEvent(req, res) {
   try {
     const event = await Event.findByIdAndDelete(req.params.id)
     if (!event) return res.status(404).json({ success: false, message: 'Event not found.' })
+
+    await deleteCloudinaryImageIfApplicable(event.image)
 
     await recordActivity('event_deleted', `Deleted event "${event.name}"`, 'Event', event._id)
 

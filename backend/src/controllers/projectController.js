@@ -1,6 +1,7 @@
 const Project = require('../models/Project')
 const { recordActivity } = require('../utils/activity')
 const { isNonEmptyString, toBoolean, toNumberOr } = require('../utils/validation')
+const { deleteCloudinaryImageIfApplicable } = require('../utils/cloudinaryImage')
 
 const GENERIC_ERROR = { success: false, message: 'Something went wrong. Please try again.' }
 
@@ -104,6 +105,7 @@ async function updateProject(req, res) {
       return res.status(400).json({ success: false, message: 'Invalid project data.', errors })
     }
 
+    const previousImage = project.image
     const { title, description, image, order, isActive } = req.body || {}
     if (title !== undefined) project.title = String(title).trim()
     if (description !== undefined) project.description = String(description).trim()
@@ -112,6 +114,11 @@ async function updateProject(req, res) {
     if (isActive !== undefined) project.isActive = toBoolean(isActive, project.isActive)
 
     await project.save()
+
+    if (image !== undefined && project.image !== previousImage) {
+      await deleteCloudinaryImageIfApplicable(previousImage)
+    }
+
     await recordActivity('project_updated', `Updated project "${project.title}"`, 'Project', project._id)
 
     return res.status(200).json({ success: true, project: toAdminProject(project) })
@@ -124,6 +131,8 @@ async function deleteProject(req, res) {
   try {
     const project = await Project.findByIdAndDelete(req.params.id)
     if (!project) return res.status(404).json({ success: false, message: 'Project not found.' })
+
+    await deleteCloudinaryImageIfApplicable(project.image)
 
     await recordActivity('project_deleted', `Deleted project "${project.title}"`, 'Project', project._id)
 
